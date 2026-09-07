@@ -320,6 +320,16 @@ static Object** _curr_crit_list;
 // 0x56D624
 static char _attack_str[AI_MESSAGE_SIZE];
 
+// FISSION-VOCK ADD: audio field (middle {..} slot of the {num}{audio}{text}
+// triple) for the taunt currently queued for display, carried from
+// _combatai_msg() to _ai_print_msg() the same way _attack_str / _target_str
+// carry the text. Split attacker/target for the same reason the text buffers
+// are: a HIT/MISS line (target speaks) and an ATTACK/RUN/MOVE line (attacker
+// speaks) can be queued back to back for two different critters. Empty string
+// means "line has no voice-over", which is every combatai.msg line in vanilla.
+static char _combatai_snd_attack[AI_MESSAGE_SIZE];
+static char _combatai_snd_target[AI_MESSAGE_SIZE];
+
 static bool gUsedPacketNum[MAX_PACKET_NUM] = { false };
 static bool gAiCollisionOccurred = false;
 static char gAiCollisionDetails[MAX_PACKET_NUM][256] = { { 0 } };
@@ -3831,32 +3841,38 @@ int _combatai_msg(Object* critter, Attack* attack, int type, int delay)
     int start;
     int end;
     char* string;
+    char* snd;
 
     switch (type) {
     case AI_MESSAGE_TYPE_RUN:
         start = ai->run.start;
         end = ai->run.end;
         string = _attack_str;
+        snd = _combatai_snd_attack;
         break;
     case AI_MESSAGE_TYPE_MOVE:
         start = ai->move.start;
         end = ai->move.end;
         string = _attack_str;
+        snd = _combatai_snd_attack;
         break;
     case AI_MESSAGE_TYPE_ATTACK:
         start = ai->attack.start;
         end = ai->attack.end;
         string = _attack_str;
+        snd = _combatai_snd_attack;
         break;
     case AI_MESSAGE_TYPE_MISS:
         start = ai->miss.start;
         end = ai->miss.end;
         string = _target_str;
+        snd = _combatai_snd_target;
         break;
     case AI_MESSAGE_TYPE_HIT:
         start = ai->hit[attack->defenderHitLocation].start;
         end = ai->hit[attack->defenderHitLocation].end;
         string = _target_str;
+        snd = _combatai_snd_target;
         break;
     default:
         return -1;
@@ -3876,6 +3892,14 @@ int _combatai_msg(Object* critter, Attack* attack, int type, int delay)
     debugPrint("%s said message %d\n", objectGetName(critter), messageListItem.num);
     snprintf(string, AI_MESSAGE_SIZE, "%s", messageListItem.text);
 
+    // FISSION-VOCK ADD: stash this line's voice-over filename (if any) so
+    // _ai_print_msg() can play it once the float is actually on screen. Kept in
+    // lockstep with the text above -- same buffer lifetime, same
+    // attacker/target split. combatai.msg ships this field empty everywhere in
+    // vanilla; a VOCK-voiced combatai.msg (or a mod's combatai_<name>.msg
+    // block) fills it with a sound/speech/ stem.
+    snprintf(snd, AI_MESSAGE_SIZE, "%s", messageListItem.audio != nullptr ? messageListItem.audio : "");
+
     // TODO: Get rid of casts.
     return animationRegisterCallback(critter, (void*)(uintptr_t)type, (AnimationCallback*)_ai_print_msg, delay);
 }
@@ -3888,13 +3912,16 @@ static int _ai_print_msg(Object* critter, int type)
     }
 
     char* string;
+    char* snd;
     switch (type) {
     case AI_MESSAGE_TYPE_HIT:
     case AI_MESSAGE_TYPE_MISS:
         string = _target_str;
+        snd = _combatai_snd_target;
         break;
     default:
         string = _attack_str;
+        snd = _combatai_snd_attack;
         break;
     }
 
@@ -3903,6 +3930,22 @@ static int _ai_print_msg(Object* critter, int type)
     Rect rect;
     if (textObjectAdd(critter, string, ai->font, ai->color, ai->outline_color, &rect) == 0) {
         tileWindowRefreshRect(&rect, critter->elevation);
+
+        // FISSION-VOCK ADD: the bark bubble just went on screen -- play its
+        // voice-over if the line carries one. speechLoadFloat() is the same
+        // pooled, distance-scaled, self-evicting path script-driven floats use
+        // (see _scr_get_msg_str_speech() in scripts.cc), so simultaneous barks
+        // from different critters don't cut each other off. Gated exactly like
+        // every other VockFloats feature: [enhancements] VockFloats +
+        // [vock-floats] VoicedFloats, and off entirely under StrictVanilla.
+        // With VockFloats off this whole block is skipped and taunts stay
+        // text-only, byte-for-byte as before.
+        if (snd[0] != '\0'
+            && settings.enhancements.vock_floats
+            && !settings.enhancements.strict_vanilla
+            && settings.mod_settings.voiced_floats) {
+            speechLoadFloat(snd, critter);
+        }
     }
 
     return 0;
