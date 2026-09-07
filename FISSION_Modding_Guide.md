@@ -2384,6 +2384,44 @@ mods/mod_myfirst.dat/\
         └── myaudio.wav
 ```
 
+### 16.5 Voiced Combat-AI Taunts (Audio)
+
+The battle-cries critters shout during combat ("Take that!", "Ow, my arm!") do **not** come
+from a per-script `.msg` file — they come from the engine's own `combatai.msg`
+(`text/{language}/game/combatai.msg`), picked by number from a range set per AI packet. That
+path renders text only in vanilla; it now also reads the same middle `{num}{audio}{text}`
+audio field every other line uses, and plays it as a voiced float over the taunting critter:
+
+```
+{2000}{}{Yer gonna die!}
+{2001}{ncr_raider_2001}{I'll cut you into little pieces!}
+```
+
+Line `{2001}` above plays `sound/speech/ncr_raider_2001.wav` (or `.acm`) — resolved exactly
+like any other speech file, flat under `sound/speech/`, case-insensitive. Line `{2000}` stays
+silent. No script or registration step is involved; the engine plays it when the bark bubble
+appears.
+
+Rules and caveats:
+
+-   **Gated by the same switches as every other VockFloats feature:** `[enhancements]
+    VockFloats=1` in `fission.cfg`, `VoicedFloats=1` in `game.cfg`'s `[vock-floats]` section,
+    and off entirely under `StrictVanilla=1`. With `VockFloats` off, combat taunts are
+    text-only, exactly as before.
+-   Also respects `[preferences] combat_taunts` — with taunts turned off, nothing displays
+    and nothing plays.
+-   Uses the pooled float-speech channels (`[vock-floats] FloatAudioChannels`), so two
+    critters barking at once don't cut each other off, and volume falls off with
+    distance/Perception like any other voiced float.
+-   **One number, one voice.** A `combatai.msg` number is shared by every critter whose AI
+    packet range covers it — voice `{2001}` and a raider, a slaver, and a mercenary all say
+    it in that same voice. For distinct per-faction voices, give each faction its own AI
+    packet pointing at a distinct number block and voice those blocks separately
+    (a `text/{language}/game/combatai_{ModName}.msg` file is merged in at a non-colliding
+    base offset for exactly this).
+-   The base game ships ~3,500 taunt lines with the audio field empty. Voicing is opt-in and
+    incremental — an unvoiced line just floats its text as always.
+
 *Document Version: 2.0 - Modder-Focused Refactor*\
 *Last Updated: Fallout 2 FISSION*\
 *For more information, see the generated reports in `data/lists/` after running the game.*
