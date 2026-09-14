@@ -68,72 +68,92 @@ namespace fallout {
 // music/SFX/dialogue budget.
 #define MOD_CONFIG_VOCK_FEATURES_KEY "vock-features"
 #define MOD_CONFIG_FLOAT_AUDIO_CHANNELS_KEY "FloatAudioChannels"
-// Float volume (and text-scramble clarity) falls off linearly with
-// distance: gain = max(0, 1 - distance/refDistance), where refDistance is
-// DistancePerPerception x Perception -- full volume at the speaker's own
-// tile, a straight ramp down to an exact 0.0 at refDistance, silent beyond
-// it. See _gsound_calc_float_distance_factor() in game_sound.cc. The
-// formula the float-speech pool originally shipped with (see commit
-// fef10eb); a config-selectable choice of curve-shaped alternatives
+// Float volume falls off linearly with distance: gain = max(0, 1 -
+// distance/refDistance), where refDistance = Perception x
+// FloatDistancePerPerception -- full volume at the speaker's own tile, a
+// straight ramp down to an exact 0.0 at refDistance, silent beyond it. See
+// _gsound_calc_float_distance_factor() in game_sound.cc. The formula the
+// float-speech pool originally shipped with (see commit fef10eb); a
+// config-selectable choice of curve-shaped alternatives
 // (vanilla-ambient-SFX-mirroring, inverse-distance, sigmoid, log) was
 // explored after that and removed again in favor of always using this one,
 // simpler formula -- see git history around
 // FLOAT_SPEECH_DISTANCE_FORMULA_VANILLA/INVERSE/SIGMOID/LOG and the
 // DistanceFormula game.cfg key if reviving any of that is ever useful.
 //
-// refDistance = Perception x DistancePerPerception. Was a hardcoded #define
+// Audio-only: TextScrambleDistancePerPerception below is float text's own
+// independent range, not derived from this one -- audio and text can fade
+// out at different distances from each other. Was a hardcoded #define
 // (FLOAT_SPEECH_DISTANCE_PER_PERCEPTION) until this key was added; default
 // (2) reproduces that original value exactly.
-#define MOD_CONFIG_FLOAT_DISTANCE_PER_PERCEPTION_KEY "DistancePerPerception"
-// 0-100, default 0 (off): how much a solid obstacle between the speaker and
-// the player dims a float, applied as a percentage multiplier on top of
-// the distance falloff above -- 0 means obstacles are ignored entirely
-// (today's behavior), 100 means a blocked line is fully silent, values
-// between scale it down proportionally.
+#define MOD_CONFIG_FLOAT_DISTANCE_PER_PERCEPTION_KEY "FloatDistancePerPerception"
+// 0-100, default 50: how much a solid obstacle between the speaker and the
+// player dims a float's audio, applied as a percentage multiplier on top
+// of the distance falloff above -- 0 means obstacles are ignored entirely,
+// 100 means a blocked line is fully silent, values between scale it down
+// proportionally.
 // Reuses the same line-of-sight raycast as the obj_can_see_obj sfall
 // opcode (_make_straight_path() in animation.cc/.h), so it costs one more
-// tile walk per float, same as combat already pays per shot fired. Affects
-// text-scramble clarity too, since gameSoundCalcFloatClarity() shares this
-// same curve -- an obstructed line reads harder to make out, same as it
-// sounds harder to make out.
-#define MOD_CONFIG_FLOAT_OBSTRUCTION_DAMPENING_KEY "ObstructionDampening"
+// tile walk per float, same as combat already pays per shot fired.
+// Audio-only: TextScrambleObstructionDampening below is float text's own
+// independent value -- a mod can dampen audio through a wall without
+// garbling its text on top, or vice versa.
+#define MOD_CONFIG_FLOAT_OBSTRUCTION_DAMPENING_KEY "FloatObstructionDampening"
 // What happens when a float triggers with every pool slot already busy --
 // see speechLoadFloat() in game_sound.cc for the 3 policy values.
-#define MOD_CONFIG_FLOAT_EVICTION_POLICY_KEY "EvictionPolicy"
+#define MOD_CONFIG_FLOAT_EVICTION_POLICY_KEY "FloatEvictionPolicy"
 #define FLOAT_SPEECH_EVICTION_POLICY_VANILLA (0)
 #define FLOAT_SPEECH_EVICTION_POLICY_OLDEST (1)
 #define FLOAT_SPEECH_EVICTION_POLICY_FURTHEST (2)
-// Off by default (non-vanilla): garbles a float's on-screen text by the
-// same distance-based clarity that already governs its audio (see
-// gameSoundCalcFloatClarity() in game_sound.cc), so a wide screen showing a
-// far-off NPC's line can't just be read clearly when it wouldn't be heard
-// clearly. Applies to every float's text regardless of whether that line
-// has an audio file or was badword-filtered -- the scramble only ever
-// touches alphabetic characters, so it can't disturb the symbols the
-// badword filter already substituted in.
-#define MOD_CONFIG_FLOAT_TEXT_SCRAMBLE_KEY "TextScramble"
-// Character pool TextScramble draws its noise glyphs from -- see
-// _scr_scramble_float_text() in scripts.cc. Any characters are accepted;
-// falls back to the default pool below if left empty in game.cfg.
-#define MOD_CONFIG_FLOAT_TEXT_SCRAMBLE_CHARS_KEY "TextScrambleChars"
 // On by default: play a float's real voice file when it has one and the
-// line is clean. Sibling of CensorBleep below -- split out so either can be
-// switched off independently under the [enhancements] VockFeatures master
-// gate (see game_config.h).
-#define MOD_CONFIG_VOICED_FLOATS_KEY "VoicedFloats"
+// line is clean. Sibling of FloatCensorBleep below -- split out so either
+// can be switched off independently under the [enhancements] VockFeatures
+// master gate (see game_config.h). This is its own feature, distinct from
+// TextScramble below (which is about the on-screen text, not the audio) --
+// hence "FloatAudio" rather than "VoicedFloats".
+#define MOD_CONFIG_FLOAT_AUDIO_KEY "FloatAudio"
 // On by default: play a censor tone in place of a badword-filtered float's
 // audio (see MESSAGE_LIST_ITEM_TEXT_FILTERED in message.h). Independent of
-// VoicedFloats -- a filtered line never plays its real audio either way, so
+// FloatAudio -- a filtered line never plays its real audio either way, so
 // this only decides whether it gets a bleep or plain silence.
-#define MOD_CONFIG_FLOAT_CENSOR_BLEEP_KEY "CensorBleep"
+#define MOD_CONFIG_FLOAT_CENSOR_BLEEP_KEY "FloatCensorBleep"
 // 0-32767 (VOLUME_MIN-VOLUME_MAX, same scale as the pre-existing dialog
 // speech_volume setting), default 22281: a per-float volume knob layered
 // multiplicatively on top of the Sound Effects Volume Preferences slider
-// (gain = Volume / VOLUME_MAX), rather than a replacement for it. Linear,
-// not logarithmic -- see _gsound_calc_float_volume() in game_sound.cc.
-#define MOD_CONFIG_FLOAT_VOLUME_KEY "Volume"
+// (gain = FloatVolume / VOLUME_MAX), rather than a replacement for it.
+// Linear, not logarithmic -- see _gsound_calc_float_volume() in
+// game_sound.cc.
+#define MOD_CONFIG_FLOAT_VOLUME_KEY "FloatVolume"
+
+// Text scrambling is its own feature, not a flavor of float audio -- it
+// garbles a float's on-screen *text*, independently of whether that float
+// has voice audio at all (see _scr_scramble_float_text() in scripts.cc).
+// Off by default (non-vanilla). Applies to every float's text regardless
+// of whether that line has an audio file or was badword-filtered -- the
+// scramble only ever touches alphabetic characters, so it can't disturb
+// the symbols the badword filter already substituted in.
+#define MOD_CONFIG_TEXT_SCRAMBLE_KEY "TextScramble"
+// TextScramble's own independent distance range, parallel to
+// FloatDistancePerPerception above but not derived from it -- same
+// refDistance = Perception x <this value> formula and the same linear
+// falloff (see _gsound_calc_float_distance_factor() in game_sound.cc,
+// called once per feature with its own distance/obstruction pair), just a
+// separate instance of it so text can stay legible farther or closer than
+// audio stays audible, tuned independently. Same default (2) as
+// FloatDistancePerPerception, since the two aren't assumed related.
+#define MOD_CONFIG_TEXT_SCRAMBLE_DISTANCE_PER_PERCEPTION_KEY "TextScrambleDistancePerPerception"
+// TextScramble's own independent obstruction value, parallel to
+// FloatObstructionDampening above -- same 0-100 meaning, same raycast, just
+// a separate knob so a wall can garble a float's text without necessarily
+// dampening its audio the same amount, or vice versa. Same default (50) as
+// FloatObstructionDampening.
+#define MOD_CONFIG_TEXT_SCRAMBLE_OBSTRUCTION_DAMPENING_KEY "TextScrambleObstructionDampening"
+// Character pool TextScramble draws its noise glyphs from -- see
+// _scr_scramble_float_text() in scripts.cc. Any characters are accepted;
+// falls back to the default pool below if left empty in game.cfg.
+#define MOD_CONFIG_TEXT_SCRAMBLE_CHARS_KEY "TextScrambleChars"
 // On by default: master on/off for voiced Pip-Boy holodisk narration,
-// independent of VoicedFloats -- lets a mod (or player) keep NPC floats
+// independent of FloatAudio -- lets a mod (or player) keep NPC floats
 // voiced while muting holodisks, or vice versa, without touching the
 // [enhancements] VockFeatures master gate. See pipboyHolodiskUpdateAudio()
 // in pipboy.cc.
@@ -206,11 +226,15 @@ namespace fallout {
 #define MOD_CONFIG_DEFAULT_FLOAT_DISTANCE_PER_PERCEPTION 2
 #define MOD_CONFIG_DEFAULT_FLOAT_OBSTRUCTION_DAMPENING 50
 #define MOD_CONFIG_DEFAULT_FLOAT_EVICTION_POLICY FLOAT_SPEECH_EVICTION_POLICY_VANILLA
-#define MOD_CONFIG_DEFAULT_FLOAT_TEXT_SCRAMBLE 0
-#define MOD_CONFIG_DEFAULT_FLOAT_TEXT_SCRAMBLE_CHARS "#%&*~^"
-#define MOD_CONFIG_DEFAULT_VOICED_FLOATS 1
+#define MOD_CONFIG_DEFAULT_FLOAT_AUDIO 1
 #define MOD_CONFIG_DEFAULT_FLOAT_CENSOR_BLEEP 1
 #define MOD_CONFIG_DEFAULT_FLOAT_VOLUME 32767
+// Same defaults as their Float* counterparts above -- the two features
+// aren't assumed related, they just happen to start out matched.
+#define MOD_CONFIG_DEFAULT_TEXT_SCRAMBLE 0
+#define MOD_CONFIG_DEFAULT_TEXT_SCRAMBLE_DISTANCE_PER_PERCEPTION 2
+#define MOD_CONFIG_DEFAULT_TEXT_SCRAMBLE_OBSTRUCTION_DAMPENING 50
+#define MOD_CONFIG_DEFAULT_TEXT_SCRAMBLE_CHARS "#%&*~^"
 #define MOD_CONFIG_DEFAULT_PIPBOY_AUDIO 1
 #define MOD_CONFIG_DEFAULT_PIPBOY_VOLUME 32767
 

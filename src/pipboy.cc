@@ -2707,7 +2707,7 @@ static void pipboyWindowRenderQuestLocationList(int selectedQuestLocation)
 // [enhancements] VockFeatures master switch plus its own [vock-features]
 // PipboyAudio toggle, so it inherits StrictVanilla but can be switched
 // on/off (and volumed via PipboyVolume) independently of NPC floats'
-// VoicedFloats.
+// FloatAudio.
 //
 // This is deliberately one clip for the whole holodisk, not one per page.
 // Pagination (PIPBOY_HOLODISK_LINES_MAX below) is a blind 35-message-ID
