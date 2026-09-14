@@ -1707,7 +1707,7 @@ static void pipboyWindowHandleStatus(int userInput)
         // longer belongs to, and clear the tracker so reopening the same
         // holodisk later restarts it from the top instead of treating it as
         // "already playing".
-        speechDelete();
+        pipboySpeechDelete();
         gPipboyHolodiskAudioIndex = -1;
         gPipboyWindowHolodisksCount = 0;
         _view_page_quest = 0;
@@ -2695,11 +2695,15 @@ static void pipboyWindowRenderQuestLocationList(int selectedQuestLocation)
 // 0x4988A0
 // Starts the voiced-holodisk speech for a holodisk when it's first opened.
 // `audio` is the raw audio field of the holodisk's very first message line
-// (holodisk->description -- same `{num}{audio}{text}` field VockFloats
-// already reads for dialogue), resolved through speechLoad() exactly like
-// any other speech file under sound/speech/. Gated behind the same VockFloats
-// master switch and VoicedFloats toggle dialogue floats use, so it inherits
-// StrictVanilla and the mod's opt-out without a separate setting.
+// (holodisk->description -- same `{num}{audio}{text}` field VockFeatures
+// already reads for dialogue), resolved through pipboySpeechLoad() exactly
+// like any other speech file under sound/speech/, but on its own dedicated
+// Pip-Boy channel (gPipboySound in game_sound.cc) rather than the shared
+// dialogue channel -- so holodisk narration can't be interrupted by, or
+// interrupt, an unrelated NPC's line. Gated behind the [enhancements]
+// VockFeatures master switch plus its own [vock-features] PipboyAudio
+// toggle, so it inherits StrictVanilla but can be switched on/off (and
+// volumed via PipboyVolume) independently of NPC floats' VoicedFloats.
 //
 // This is deliberately one clip for the whole holodisk, not one per page.
 // Pagination (PIPBOY_HOLODISK_LINES_MAX below) is a blind 35-message-ID
@@ -2711,19 +2715,23 @@ static void pipboyWindowRenderQuestLocationList(int selectedQuestLocation)
 // text is edited. One clip that just keeps playing while the reader flips
 // pages has no such seam: pipboyRenderHolodiskText() calls this only when
 // _holodisk changes (see gPipboyHolodiskAudioIndex there), not on every page
-// turn, so speechLoad() is never re-triggered by paging within the same disk.
+// turn, so pipboySpeechLoad() is never re-triggered by paging within the
+// same disk.
 //
 // The audio field is a bare filename, same as dialogue's -- see ACERIC.MSG's
 // "{101}{fea1}{...}" or lipsLoad()'s headFileName/audioFileName split. Vanilla
 // never puts a path in a .msg field; the folder always comes from context
 // (there it's the speaking critter's head name, built in lipsLoad() as
-// SOUND\SPEECH\<headFileName>\<audioFileName>). Holodisks have no critter, so
-// the folder is simply fixed to "holodisks" here instead of per-instance.
+// SOUND\SPEECH\<headFileName>\<audioFileName>). Holodisks have no critter,
+// so the folder is fixed to "pipboy" here instead of per-instance -- matches
+// the vock-fo2 data layout's own dedicated pipboy audio folder rather than
+// a generic "holodisks" name, since the channel (and its settings) are
+// scoped to the Pip-Boy, not specifically to holodisks.
 static void pipboyHolodiskUpdateAudio(const char* audio)
 {
-    bool voicedHolodisksEnabled = settings.enhancements.vock_floats
+    bool voicedHolodisksEnabled = settings.enhancements.vock_features
         && !settings.enhancements.strict_vanilla
-        && settings.mod_settings.voiced_floats;
+        && settings.mod_settings.pipboy_audio;
 
     if (!voicedHolodisksEnabled) {
         return;
@@ -2731,10 +2739,10 @@ static void pipboyHolodiskUpdateAudio(const char* audio)
 
     if (audio != nullptr && audio[0] != '\0') {
         char path[COMPAT_MAX_PATH];
-        snprintf(path, sizeof(path), "holodisks\\%s", audio);
-        speechLoad(path, GSOUND_LIMIT_AFTER, GSOUND_STREAM, GSOUND_NO_LOOP);
+        snprintf(path, sizeof(path), "pipboy\\%s", audio);
+        pipboySpeechLoad(path, GSOUND_LIMIT_AFTER, GSOUND_STREAM, GSOUND_NO_LOOP);
     } else {
-        speechDelete();
+        pipboySpeechDelete();
     }
 }
 
@@ -4901,7 +4909,9 @@ static void generateHolodiskListReport()
         "   holodisk's FIRST line's audio field, e.g. {1}{myquest_intro}{line1}.\n"
         "   One clip for the whole holodisk, not per page (pages break mid-\n"
         "   sentence, so per-page audio can't be cut cleanly). Resolves to\n"
-        "   sound/speech/holodisks/myquest_intro.*. Requires VockFloats+VoicedFloats.\n");
+        "   sound/speech/pipboy/myquest_intro.*. Requires [enhancements]\n"
+        "   VockFeatures=1 and [vock-features] PipboyAudio=1 (both on by\n"
+        "   default); volume is [vock-features] PipboyVolume.\n");
 
     fclose(reportFile);
 }
@@ -5048,7 +5058,7 @@ static void holodiskFree()
     // Safety net for pipboyWindowFree(): stop any holodisk narration still
     // playing when the whole Pip-Boy window closes, not just when backing
     // out to the status list.
-    speechDelete();
+    pipboySpeechDelete();
     gPipboyHolodiskAudioIndex = -1;
 
     if (gHolodiskDescriptions != nullptr) {
