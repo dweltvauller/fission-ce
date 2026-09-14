@@ -2696,14 +2696,18 @@ static void pipboyWindowRenderQuestLocationList(int selectedQuestLocation)
 // Starts the voiced-holodisk speech for a holodisk when it's first opened.
 // `audio` is the raw audio field of the holodisk's very first message line
 // (holodisk->description -- same `{num}{audio}{text}` field VockFeatures
-// already reads for dialogue), resolved through pipboySpeechLoad() exactly
-// like any other speech file under sound/speech/, but on its own dedicated
-// Pip-Boy channel (gPipboySound in game_sound.cc) rather than the shared
-// dialogue channel -- so holodisk narration can't be interrupted by, or
-// interrupt, an unrelated NPC's line. Gated behind the [enhancements]
-// VockFeatures master switch plus its own [vock-features] PipboyAudio
-// toggle, so it inherits StrictVanilla but can be switched on/off (and
-// volumed via PipboyVolume) independently of NPC floats' VoicedFloats.
+// already reads for dialogue), resolved through pipboySpeechLoad() on its
+// own dedicated Pip-Boy channel (gPipboySound in game_sound.cc) rather than
+// the shared dialogue channel -- so holodisk narration can't be interrupted
+// by, or interrupt, an unrelated NPC's line. Its audio also lives under its
+// own root, sound/pipboy/, rather than under sound/speech/ alongside
+// dialogue and floats -- see gameSoundFindPipboySoundPath() in
+// game_sound.cc -- since Pip-Boy narration has no critter/head behind it
+// and isn't really "speech" in the dialogue-system sense. Gated behind the
+// [enhancements] VockFeatures master switch plus its own [vock-features]
+// PipboyAudio toggle, so it inherits StrictVanilla but can be switched
+// on/off (and volumed via PipboyVolume) independently of NPC floats'
+// VoicedFloats.
 //
 // This is deliberately one clip for the whole holodisk, not one per page.
 // Pagination (PIPBOY_HOLODISK_LINES_MAX below) is a blind 35-message-ID
@@ -2722,11 +2726,12 @@ static void pipboyWindowRenderQuestLocationList(int selectedQuestLocation)
 // "{101}{fea1}{...}" or lipsLoad()'s headFileName/audioFileName split. Vanilla
 // never puts a path in a .msg field; the folder always comes from context
 // (there it's the speaking critter's head name, built in lipsLoad() as
-// SOUND\SPEECH\<headFileName>\<audioFileName>). Holodisks have no critter,
-// so the folder is fixed to "pipboy" here instead of per-instance -- matches
-// the vock-fo2 data layout's own dedicated pipboy audio folder rather than
-// a generic "holodisks" name, since the channel (and its settings) are
-// scoped to the Pip-Boy, not specifically to holodisks.
+// SOUND\SPEECH\<headFileName>\<audioFileName>). Holodisks have no critter
+// and no per-instance folder to key off of, and unlike dialogue this isn't
+// nested under sound/speech/ at all -- gameSoundFindPipboySoundPath()
+// resolves the bare filename straight under sound/pipboy/, a sibling of
+// sound/speech/ rather than a subfolder of it, since Pip-Boy narration
+// (and its settings) are their own category, not a flavor of dialogue.
 static void pipboyHolodiskUpdateAudio(const char* audio)
 {
     bool voicedHolodisksEnabled = settings.enhancements.vock_features
@@ -2738,9 +2743,9 @@ static void pipboyHolodiskUpdateAudio(const char* audio)
     }
 
     if (audio != nullptr && audio[0] != '\0') {
-        char path[COMPAT_MAX_PATH];
-        snprintf(path, sizeof(path), "pipboy\\%s", audio);
-        pipboySpeechLoad(path, GSOUND_LIMIT_AFTER, GSOUND_STREAM, GSOUND_NO_LOOP);
+        // Bare filename -- gameSoundFindPipboySoundPath() already roots
+        // the lookup at sound/pipboy/, so no folder prefix belongs here.
+        pipboySpeechLoad(audio, GSOUND_LIMIT_AFTER, GSOUND_STREAM, GSOUND_NO_LOOP);
     } else {
         pipboySpeechDelete();
     }
@@ -4909,7 +4914,7 @@ static void generateHolodiskListReport()
         "   holodisk's FIRST line's audio field, e.g. {1}{myquest_intro}{line1}.\n"
         "   One clip for the whole holodisk, not per page (pages break mid-\n"
         "   sentence, so per-page audio can't be cut cleanly). Resolves to\n"
-        "   sound/speech/pipboy/myquest_intro.*. Requires [enhancements]\n"
+        "   sound/pipboy/myquest_intro.*. Requires [enhancements]\n"
         "   VockFeatures=1 and [vock-features] PipboyAudio=1 (both on by\n"
         "   default); volume is [vock-features] PipboyVolume.\n");
 
